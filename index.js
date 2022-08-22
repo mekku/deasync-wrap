@@ -1,12 +1,24 @@
-module.exports = (asyncFunc) => {
+module.exports = (asyncFunc, timeoutInMillisec = null, tick = 100) => {
+    const STAGE = { INIT: 0, RESOLVE: 1, REJECT: 2 }
     return (...args) => {
         let result = undefined;
-        let resultError = undefined;
-        let done = false
-        asyncFunc(...args).then((ret) => { done = true; result = ret }).catch(error => { done = true; resultError = error })
+        let processStage = STAGE.INIT;
+        asyncFunc(...args)
+            .then((ret) => { processStage = STAGE.RESOLVE; result = ret }).
+            catch(error => { processStage = STAGE.REJECT; result = error })
 
-        require('deasync').loopWhile(() => !done && result === undefined);
-        if (resultError) throw resultError
+        const waitUntil = new Date(new Date().getTime() + timeoutInMillisec)
+
+        if (timeoutInMillisec == null) {
+            require('deasync').loopWhile(() => processStage == STAGE.INIT);
+        }
+        else {
+            while (processStage == STAGE.INIT && waitUntil > new Date()) require('deasync').sleep(tick)
+        }
+
+        if (processStage == STAGE.INIT) throw new Error(`${asyncFunc.name} function is timeout`)
+
+        if (processStage == STAGE.REJECT) throw result
         return result
     }
 }
